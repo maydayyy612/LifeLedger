@@ -211,10 +211,10 @@ body {
 
   <!-- BOTTOM NAV -->
   <div class="nav">
-    <div class="nav-item active" onclick="switchPage('home')">首页</div>
-    <div class="nav-item" onclick="switchPage('timeline')">时间轴</div>
-    <div class="nav-item" onclick="switchPage('stats')">统计</div>
-    <div class="nav-item" onclick="switchPage('settings')">我的</div>
+    <div class="nav-item active" onclick="switchPage('home', this)">首页</div>
+    <div class="nav-item" onclick="switchPage('timeline', this)">时间轴</div>
+    <div class="nav-item" onclick="switchPage('stats', this)">统计</div>
+    <div class="nav-item" onclick="switchPage('settings', this)">我的</div>
   </div>
 
 </div>
@@ -222,6 +222,7 @@ body {
 
   <script>
     let db;
+let editId = null;
     function initDB() {
   const request = indexedDB.open("LifeLedgerDB", 1);
 
@@ -295,18 +296,33 @@ body {
 /* =========================
    SIMPLE ROUTER
 ========================= */
-function switchPage(page) {
+function switchPage(page, el) {
 
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
-
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
 
   document.getElementById('page-' + page).classList.remove('hidden');
 
-  event.target.classList.add('active');
+  el.classList.add('active');
 }
-    function openSheet() {
+    function openSheet(mode = "add", data = null) {
   document.getElementById("sheet").style.bottom = "0px";
+
+  if (mode === "edit" && data) {
+    editId = data.id;
+
+    document.getElementById("type").value = data.type;
+    document.getElementById("amount").value = data.amount;
+    document.getElementById("category").value = data.category;
+    document.getElementById("note").value = data.note;
+  } else {
+    editId = null;
+
+    document.getElementById("type").value = "expense";
+    document.getElementById("amount").value = "";
+    document.getElementById("category").value = "餐饮";
+    document.getElementById("note").value = "";
+  }
 }
 
 function closeSheet() {
@@ -319,21 +335,41 @@ function closeSheet() {
   const category = document.getElementById("category").value;
   const note = document.getElementById("note").value;
 
+  if (!amount || isNaN(amount)) {
+    alert("请输入正确金额");
+    return;
+  }
+
   const tx = db.transaction(["records"], "readwrite");
   const store = tx.objectStore("records");
 
-  store.add({
+  const data = {
     type,
     amount,
     category,
     note,
     date: new Date().toISOString()
-  });
+  };
 
-  tx.oncomplete = function() {
+  if (editId) {
+    data.id = editId;
+    store.put(data);
+  } else {
+    store.add(data);
+  }
+
+  tx.oncomplete = function () {
     closeSheet();
     loadRecords();
   };
+}
+     function deleteRecord(id) {
+  const tx = db.transaction(["records"], "readwrite");
+  const store = tx.objectStore("records");
+
+  store.delete(id);
+
+  tx.oncomplete = loadRecords;
 }
     function loadRecords() {
 
@@ -366,7 +402,8 @@ function closeSheet() {
   cards[0].innerText = "￥" + balance;
   cards[1].innerText = "￥" + income;
   cards[2].innerText = "￥" + expense;
-}function updateTimeline(data) {
+}
+     function updateTimeline(data) {
 
   const page = document.getElementById("page-timeline");
 
@@ -374,12 +411,41 @@ function closeSheet() {
 
   data.slice().reverse().forEach(item => {
     html += `
-      <div style="margin-top:10px;">
-        ${item.category}
-        <div style="color:${item.type==='income'?'#34c759':'#ff3b30'}">
-          ${item.type==='income' ? '+' : '-'}${item.amount}
-          
+      <div style="margin-top:12px;padding:10px;border-radius:10px;background:#fafafa;">
+
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+
+          <div>
+            <div style="font-size:14px;">${item.category}</div>
+            <div style="font-size:12px;color:#999;">
+              ${item.note || ""}
+            </div>
+          </div>
+
+          <div style="text-align:right;">
+
+            <div style="color:${item.type === 'income' ? '#34c759' : '#ff3b30'}">
+              ${item.type === 'income' ? '+' : '-'}${item.amount}
+            </div>
+
+            <div style="margin-top:6px;">
+
+              <button onclick='openSheet("edit", ${JSON.stringify(item)})'
+                style="font-size:12px;margin-right:6px;">
+                编辑
+              </button>
+
+              <button onclick="deleteRecord(${item.id})"
+                style="font-size:12px;color:red;">
+                删除
+              </button>
+
+            </div>
+
+          </div>
+
         </div>
+
       </div>
     `;
   });
