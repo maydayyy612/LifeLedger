@@ -215,7 +215,7 @@ body {
 </div>
 
   <!-- FLOAT BUTTON -->
- <div class="fab" onclick="openSheet('add')">+</div>
+ <div class="fab" onclick="openSheetFromFab()">+</div>
 
   <!-- BOTTOM NAV -->
   <div class="nav">
@@ -231,15 +231,25 @@ body {
 
   <script>
     
+/* =========================
+   V3 STABLE FIX VERSION
+   LifeLedger（可运行稳定版）
+========================= */
+
 let db;
 let editId = null;
 
+/* =========================
+   分类（稳定版）
+========================= */
 const categories = [
   "餐饮","饮品","交通","房租","购物","娱乐",
   "旅行","数码","工资","投资","礼物","宠物","学习","医疗","其他"
 ];
 
-/* ========= 数据层 ========= */
+/* =========================
+   数据层
+========================= */
 const DataLayer = {
 
   add(record) {
@@ -267,11 +277,13 @@ const DataLayer = {
     const tx = db.transaction(["records"], "readonly");
     const store = tx.objectStore("records");
     const req = store.getAll();
-    req.onsuccess = () => cb(req.result);
+    req.onsuccess = () => cb(req.result || []);
   }
 };
 
-/* ========= 逻辑层 ========= */
+/* =========================
+   逻辑层
+========================= */
 const Logic = {
 
   calculate(data) {
@@ -279,19 +291,27 @@ const Logic = {
     let expense = 0;
     let categoryMap = {};
 
-    data.forEach(item => {
-      if (item.type === "income") income += item.amount;
-      else expense += item.amount;
+    data.forEach(i => {
+      const amount = Number(i.amount) || 0;
 
-      categoryMap[item.category] =
-        (categoryMap[item.category] || 0) + item.amount;
+      if (i.type === "income") income += amount;
+      else expense += amount;
+
+      categoryMap[i.category] = (categoryMap[i.category] || 0) + amount;
     });
 
-    return { income, expense, balance: income - expense, categoryMap };
+    return {
+      income,
+      expense,
+      balance: income - expense,
+      categoryMap
+    };
   }
 };
 
-/* ========= UI层 ========= */
+/* =========================
+   UI层
+========================= */
 const UI = {
 
   refresh() {
@@ -301,30 +321,38 @@ const UI = {
       UI.renderStats(data);
     });
   },
-   renderCharts(data);
 
   renderHome(data) {
     const r = Logic.calculate(data);
     const cards = document.querySelectorAll(".big-number");
 
-    cards[0].innerText = "￥" + r.balance;
-    cards[1].innerText = "￥" + r.income;
-    cards[2].innerText = "￥" + r.expense;
+    if (cards.length >= 3) {
+      cards[0].innerText = "￥" + r.balance;
+      cards[1].innerText = "￥" + r.income;
+      cards[2].innerText = "￥" + r.expense;
+    }
   },
 
   renderTimeline(data) {
     const page = document.getElementById("page-timeline");
+    if (!page) return;
 
     let html = `<div class="card"><div class="sub">时间轴</div>`;
 
     data.slice().reverse().forEach(item => {
+
+      const safeItem = encodeURIComponent(JSON.stringify(item));
+
       html += `
         <div style="margin-top:12px;padding:10px;background:#fafafa;border-radius:10px;">
-          <div style="display:flex;justify-content:space-between;">
+
+          <div style="display:flex;justify-content:space-between;align-items:center;">
 
             <div>
-              <div>${item.category}</div>
-              <div style="font-size:12px;color:#999">${item.note || ""}</div>
+              <div>${item.category || ""}</div>
+              <div style="font-size:12px;color:#999;">
+                ${item.note || ""}
+              </div>
             </div>
 
             <div style="text-align:right;">
@@ -334,7 +362,7 @@ const UI = {
               </div>
 
               <div style="margin-top:6px;">
-                <button onclick='UI.edit(${JSON.stringify(item)})'>编辑</button>
+                <button onclick='UI.edit("${safeItem}")'>编辑</button>
                 <button onclick='DataLayer.delete(${item.id})' style="color:red;">删除</button>
               </div>
 
@@ -352,6 +380,9 @@ const UI = {
   renderStats(data) {
     const r = Logic.calculate(data);
 
+    const page = document.getElementById("page-stats");
+    if (!page) return;
+
     let html = `
       <div class="card">
         <div class="sub">统计</div>
@@ -367,27 +398,30 @@ const UI = {
     `;
 
     for (let k in r.categoryMap) {
-      html += `<div style="margin-top:8px;">${k}：￥${r.categoryMap[k]}</div>`;
+      html += `<div style="margin-top:6px;">${k}：￥${r.categoryMap[k]}</div>`;
     }
 
     html += `</div>`;
-
-    document.getElementById("page-stats").innerHTML = html;
+    page.innerHTML = html;
   },
 
-  edit(item) {
+  edit(encoded) {
+    const item = JSON.parse(decodeURIComponent(encoded));
+
     editId = item.id;
 
-    document.getElementById("type").value = item.type;
-    document.getElementById("amount").value = item.amount;
-    document.getElementById("category").value = item.category;
-    document.getElementById("note").value = item.note;
+    document.getElementById("type").value = item.type || "expense";
+    document.getElementById("amount").value = item.amount || "";
+    document.getElementById("category").value = item.category || "餐饮";
+    document.getElementById("note").value = item.note || "";
 
-    openSheet("edit", item);
+    openSheet();
   }
 };
 
-/* ========= 保存 ========= */
+/* =========================
+   保存记录
+========================= */
 function saveRecord() {
 
   const type = document.getElementById("type").value;
@@ -395,8 +429,8 @@ function saveRecord() {
   const category = document.getElementById("category").value;
   const note = document.getElementById("note").value;
 
-  if (!amount || isNaN(amount)) {
-    alert("请输入正确金额");
+  if (isNaN(amount)) {
+    alert("请输入金额");
     return;
   }
 
@@ -419,12 +453,13 @@ function saveRecord() {
   closeSheet();
 }
 
-/* ========= sheet ========= */
-function openSheet(mode = "add") {
+/* =========================
+   sheet 控制（稳定版）
+========================= */
+function openSheet() {
   document.getElementById("sheet").style.bottom = "0px";
 
-  if (mode === "add") {
-    editId = null;
+  if (!editId) {
     document.getElementById("type").value = "expense";
     document.getElementById("amount").value = "";
     document.getElementById("category").value = "餐饮";
@@ -434,14 +469,19 @@ function openSheet(mode = "add") {
 
 function closeSheet() {
   document.getElementById("sheet").style.bottom = "-600px";
+  editId = null;
 }
 
-/* ========= DB ========= */
+/* =========================
+   DB
+========================= */
 function initDB() {
+
   const request = indexedDB.open("LifeLedgerDB", 1);
 
   request.onupgradeneeded = e => {
     db = e.target.result;
+
     if (!db.objectStoreNames.contains("records")) {
       db.createObjectStore("records", {
         keyPath: "id",
@@ -458,93 +498,26 @@ function initDB() {
 
 window.onload = initDB;
 
-/* ========= 路由 ========= */
+/* =========================
+   页面切换（稳定修复）
+========================= */
 function switchPage(page, el) {
 
   document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
   document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
 
-  document.getElementById('page-' + page).classList.remove('hidden');
-  el.classList.add('active');
-   if (page === "calendar") {
-  DataLayer.getAll(renderCalendar);
+  const target = document.getElementById('page-' + page);
+  if (target) target.classList.remove('hidden');
+
+  if (el) el.classList.add('active');
 }
-}
-     function renderCharts(data) {
 
-  const r = Logic.calculate(data);
-
-  /* ================= 饼图 ================= */
-  const pie = echarts.init(document.createElement('div'));
-  document.body.appendChild(pie.dom || pie._dom);
-
-  const pieChart = echarts.init(document.getElementById('page-stats'));
-
-  const pieData = Object.keys(r.categoryMap).map(k => ({
-    name: k,
-    value: r.categoryMap[k]
-  }));
-
-  pieChart.setOption({
-    title: { text: '分类占比', left: 'center' },
-    series: [{
-      type: 'pie',
-      radius: '60%',
-      data: pieData
-    }]
-  });
-
-  /* ================= 折线图 ================= */
-  const lineDiv = document.createElement('div');
-  lineDiv.style.height = "250px";
-  document.getElementById("page-stats").appendChild(lineDiv);
-
-  const lineChart = echarts.init(lineDiv);
-
-  const byDate = {};
-
-  data.forEach(i => {
-    const d = i.date.split("T")[0];
-    byDate[d] = (byDate[d] || 0) + (i.type === "expense" ? i.amount : 0);
-  });
-
-  lineChart.setOption({
-    title: { text: '每日支出趋势' },
-    xAxis: { type: 'category', data: Object.keys(byDate) },
-    yAxis: { type: 'value' },
-    series: [{
-      type: 'line',
-      data: Object.values(byDate)
-    }]
-  });
-}
-     function renderCalendar(data) {
-
-  const box = document.getElementById("calendar-box");
-
-  const map = {};
-
-  data.forEach(i => {
-    const d = i.date.split("T")[0];
-    map[d] = (map[d] || 0) + (i.type === "expense" ? -i.amount : i.amount);
-  });
-
-  let html = `<div class="card">`;
-
-  for (let date in map) {
-    html += `
-      <div style="display:flex;justify-content:space-between;margin:10px 0;">
-        <div>${date}</div>
-        <div style="color:${map[date] >= 0 ? '#34c759' : '#ff3b30'}">
-          ${map[date]}
-        </div>
-      </div>
-    `;
-  }
-
-  html += `</div>`;
-
-  box.innerHTML = html;
+/* =========================
+   FAB按钮
+========================= */
+function openSheetFromFab() {
+  editId = null;
+  openSheet();
 }
 </script>
 <div id="sheet" style="
