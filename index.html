@@ -221,114 +221,164 @@ body {
 
 
   <script>
-    let db;
+    
+let db;
 let editId = null;
-    function initDB() {
-  const request = indexedDB.open("LifeLedgerDB", 1);
 
-  request.onupgradeneeded = function(e) {
-    db = e.target.result;
+const categories = [
+  "餐饮","饮品","交通","房租","购物","娱乐",
+  "旅行","数码","工资","投资","礼物","宠物","学习","医疗","其他"
+];
 
-    if (!db.objectStoreNames.contains("records")) {
-      const store = db.createObjectStore("records", {
-        keyPath: "id",
-        autoIncrement: true
-      });
-    }
-  };
+/* ========= 数据层 ========= */
+const DataLayer = {
 
-  request.onsuccess = function(e) {
-    db = e.target.result;
-    loadRecords();
-  };
-}
-     function updateStats(data) {
+  add(record) {
+    const tx = db.transaction(["records"], "readwrite");
+    const store = tx.objectStore("records");
+    store.add(record);
+    tx.oncomplete = UI.refresh;
+  },
 
-  let income = 0;
-  let expense = 0;
+  update(record) {
+    const tx = db.transaction(["records"], "readwrite");
+    const store = tx.objectStore("records");
+    store.put(record);
+    tx.oncomplete = UI.refresh;
+  },
 
-  let categoryMap = {};
+  delete(id) {
+    const tx = db.transaction(["records"], "readwrite");
+    const store = tx.objectStore("records");
+    store.delete(id);
+    tx.oncomplete = UI.refresh;
+  },
 
-  data.forEach(item => {
+  getAll(cb) {
+    const tx = db.transaction(["records"], "readonly");
+    const store = tx.objectStore("records");
+    const req = store.getAll();
+    req.onsuccess = () => cb(req.result);
+  }
+};
 
-    if (item.type === "income") {
-      income += item.amount;
-    } else {
-      expense += item.amount;
-    }
+/* ========= 逻辑层 ========= */
+const Logic = {
 
-    if (!categoryMap[item.category]) {
-      categoryMap[item.category] = 0;
-    }
+  calculate(data) {
+    let income = 0;
+    let expense = 0;
+    let categoryMap = {};
 
-    categoryMap[item.category] += item.amount;
-  });
+    data.forEach(item => {
+      if (item.type === "income") income += item.amount;
+      else expense += item.amount;
 
-  const balance = income - expense;
+      categoryMap[item.category] =
+        (categoryMap[item.category] || 0) + item.amount;
+    });
 
-  let html = `
-    <div class="card">
-      <div class="sub">本月统计</div>
+    return { income, expense, balance: income - expense, categoryMap };
+  }
+};
 
-      <div style="margin-top:10px;">
-        收入：￥${income}<br>
-        支出：￥${expense}<br>
-        结余：￥${balance}
+/* ========= UI层 ========= */
+const UI = {
+
+  refresh() {
+    DataLayer.getAll(data => {
+      UI.renderHome(data);
+      UI.renderTimeline(data);
+      UI.renderStats(data);
+    });
+  },
+
+  renderHome(data) {
+    const r = Logic.calculate(data);
+    const cards = document.querySelectorAll(".big-number");
+
+    cards[0].innerText = "￥" + r.balance;
+    cards[1].innerText = "￥" + r.income;
+    cards[2].innerText = "￥" + r.expense;
+  },
+
+  renderTimeline(data) {
+    const page = document.getElementById("page-timeline");
+
+    let html = `<div class="card"><div class="sub">时间轴</div>`;
+
+    data.slice().reverse().forEach(item => {
+      html += `
+        <div style="margin-top:12px;padding:10px;background:#fafafa;border-radius:10px;">
+          <div style="display:flex;justify-content:space-between;">
+
+            <div>
+              <div>${item.category}</div>
+              <div style="font-size:12px;color:#999">${item.note || ""}</div>
+            </div>
+
+            <div style="text-align:right;">
+
+              <div style="color:${item.type==='income'?'#34c759':'#ff3b30'}">
+                ${item.type==='income' ? '+' : '-'}${item.amount}
+              </div>
+
+              <div style="margin-top:6px;">
+                <button onclick='UI.edit(${JSON.stringify(item)})'>编辑</button>
+                <button onclick='DataLayer.delete(${item.id})' style="color:red;">删除</button>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+      `;
+    });
+
+    html += `</div>`;
+    page.innerHTML = html;
+  },
+
+  renderStats(data) {
+    const r = Logic.calculate(data);
+
+    let html = `
+      <div class="card">
+        <div class="sub">统计</div>
+        <div style="margin-top:10px;">
+          收入：￥${r.income}<br>
+          支出：￥${r.expense}<br>
+          结余：￥${r.balance}
+        </div>
       </div>
-    </div>
 
-    <div class="card">
-      <div class="sub">分类统计</div>
-  `;
-
-  for (let key in categoryMap) {
-    html += `
-      <div style="margin-top:8px;">
-        ${key}：￥${categoryMap[key]}
-      </div>
+      <div class="card">
+        <div class="sub">分类统计</div>
     `;
+
+    for (let k in r.categoryMap) {
+      html += `<div style="margin-top:8px;">${k}：￥${r.categoryMap[k]}</div>`;
+    }
+
+    html += `</div>`;
+
+    document.getElementById("page-stats").innerHTML = html;
+  },
+
+  edit(item) {
+    editId = item.id;
+
+    document.getElementById("type").value = item.type;
+    document.getElementById("amount").value = item.amount;
+    document.getElementById("category").value = item.category;
+    document.getElementById("note").value = item.note;
+
+    openSheet("edit", item);
   }
+};
 
-  html += `</div>`;
-
-  document.getElementById("page-stats").innerHTML = html;
-}
-/* =========================
-   SIMPLE ROUTER
-========================= */
-function switchPage(page, el) {
-
-  document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
-  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
-
-  document.getElementById('page-' + page).classList.remove('hidden');
-
-  el.classList.add('active');
-}
-    function openSheet(mode = "add", data = null) {
-  document.getElementById("sheet").style.bottom = "0px";
-
-  if (mode === "edit" && data) {
-    editId = data.id;
-
-    document.getElementById("type").value = data.type;
-    document.getElementById("amount").value = data.amount;
-    document.getElementById("category").value = data.category;
-    document.getElementById("note").value = data.note;
-  } else {
-    editId = null;
-
-    document.getElementById("type").value = "expense";
-    document.getElementById("amount").value = "";
-    document.getElementById("category").value = "餐饮";
-    document.getElementById("note").value = "";
-  }
-}
-
-function closeSheet() {
-  document.getElementById("sheet").style.bottom = "-600px";
-}
-    function saveRecord() {
+/* ========= 保存 ========= */
+function saveRecord() {
 
   const type = document.getElementById("type").value;
   const amount = parseFloat(document.getElementById("amount").value);
@@ -340,10 +390,8 @@ function closeSheet() {
     return;
   }
 
-  const tx = db.transaction(["records"], "readwrite");
-  const store = tx.objectStore("records");
-
-  const data = {
+  const record = {
+    id: editId,
     type,
     amount,
     category,
@@ -352,115 +400,63 @@ function closeSheet() {
   };
 
   if (editId) {
-    data.id = editId;
-    store.put(data);
+    DataLayer.update(record);
   } else {
-    store.add(data);
+    delete record.id;
+    DataLayer.add(record);
   }
 
-  tx.oncomplete = function () {
-    closeSheet();
-    loadRecords();
+  closeSheet();
+}
+
+/* ========= sheet ========= */
+function openSheet(mode = "add") {
+  document.getElementById("sheet").style.bottom = "0px";
+
+  if (mode === "add") {
+    editId = null;
+    document.getElementById("type").value = "expense";
+    document.getElementById("amount").value = "";
+    document.getElementById("category").value = "餐饮";
+    document.getElementById("note").value = "";
+  }
+}
+
+function closeSheet() {
+  document.getElementById("sheet").style.bottom = "-600px";
+}
+
+/* ========= DB ========= */
+function initDB() {
+  const request = indexedDB.open("LifeLedgerDB", 1);
+
+  request.onupgradeneeded = e => {
+    db = e.target.result;
+    if (!db.objectStoreNames.contains("records")) {
+      db.createObjectStore("records", {
+        keyPath: "id",
+        autoIncrement: true
+      });
+    }
+  };
+
+  request.onsuccess = e => {
+    db = e.target.result;
+    UI.refresh();
   };
 }
-     function deleteRecord(id) {
-  const tx = db.transaction(["records"], "readwrite");
-  const store = tx.objectStore("records");
 
-  store.delete(id);
+window.onload = initDB;
 
-  tx.oncomplete = loadRecords;
+/* ========= 路由 ========= */
+function switchPage(page, el) {
+
+  document.querySelectorAll('.page').forEach(p => p.classList.add('hidden'));
+  document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+
+  document.getElementById('page-' + page).classList.remove('hidden');
+  el.classList.add('active');
 }
-    function loadRecords() {
-
-  const tx = db.transaction(["records"], "readonly");
-  const store = tx.objectStore("records");
-
-  const req = store.getAll();
-
-  req.onsuccess = function() {
-    const data = req.result;
-
-    updateHome(data);
-    updateTimeline(data);
-     updateStats(data);
-  };
-}function updateHome(data) {
-
-  let income = 0;
-  let expense = 0;
-
-  data.forEach(item => {
-    if (item.type === "income") income += item.amount;
-    else expense += item.amount;
-  });
-
-  const balance = income - expense;
-
-  const cards = document.querySelectorAll(".big-number");
-
-  cards[0].innerText = "￥" + balance;
-  cards[1].innerText = "￥" + income;
-  cards[2].innerText = "￥" + expense;
-}
-     function updateTimeline(data) {
-
-  const page = document.getElementById("page-timeline");
-
-  let html = `<div class="card"><div class="sub">时间轴</div>`;
-
-  data.slice().reverse().forEach(item => {
-    html += `
-      <div style="margin-top:12px;padding:10px;border-radius:10px;background:#fafafa;">
-
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-
-          <div>
-            <div style="font-size:14px;">${item.category}</div>
-            <div style="font-size:12px;color:#999;">
-              ${item.note || ""}
-            </div>
-          </div>
-
-          <div style="text-align:right;">
-
-            <div style="color:${item.type === 'income' ? '#34c759' : '#ff3b30'}">
-              ${item.type === 'income' ? '+' : '-'}${item.amount}
-            </div>
-
-            <div style="margin-top:6px;">
-
-              <button onclick='openSheet("edit", ${JSON.stringify(item)})'
-                style="font-size:12px;margin-right:6px;">
-                编辑
-              </button>
-
-              <button onclick="deleteRecord(${item.id})"
-                style="font-size:12px;color:red;">
-                删除
-              </button>
-
-            </div>
-
-          </div>
-
-        </div>
-
-      </div>
-    `;
-  });
-
-  html += `</div>`;
-
-  page.innerHTML = html;
-}
-
-/* =========================
-   INIT
-========================= */
-window.onload = function() {
-  initDB();
-};
 </script>
 <div id="sheet" style="
 position:fixed;
