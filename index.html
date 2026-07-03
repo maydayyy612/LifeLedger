@@ -296,6 +296,7 @@ function closeSheet() {
 
     updateHome(data);
     updateTimeline(data);
+     updateStats(data);
   };
 }function updateHome(data) {
 
@@ -326,6 +327,57 @@ function closeSheet() {
         ${item.category}
         <div style="color:${item.type==='income'?'#34c759':'#ff3b30'}">
           ${item.type==='income' ? '+' : '-'}${item.amount}
+          function updateStats(data) {
+
+  let income = 0;
+  let expense = 0;
+
+  let categoryMap = {};
+
+  data.forEach(item => {
+
+    if (item.type === "income") {
+      income += item.amount;
+    } else {
+      expense += item.amount;
+    }
+
+    if (!categoryMap[item.category]) {
+      categoryMap[item.category] = 0;
+    }
+
+    categoryMap[item.category] += item.amount;
+  });
+
+  const balance = income - expense;
+
+  let html = `
+    <div class="card">
+      <div class="sub">本月统计</div>
+
+      <div style="margin-top:10px;">
+        收入：￥${income}<br>
+        支出：￥${expense}<br>
+        结余：￥${balance}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="sub">分类统计</div>
+  `;
+
+  for (let key in categoryMap) {
+    html += `
+      <div style="margin-top:8px;">
+        ${key}：￥${categoryMap[key]}
+      </div>
+    `;
+  }
+
+  html += `</div>`;
+
+  document.getElementById("page-stats").innerHTML = html;
+}
         </div>
       </div>
     `;
