@@ -178,7 +178,14 @@ body {
   </div>
 
   <!-- ================= TIMELINE ================= -->
-  <div id="page-timeline" class="page hidden">
+  <div style="padding:10px 0;">
+
+  <input id="searchBox"
+    placeholder="搜索：金额 / 分类 / 标签 / 备注"
+    style="width:100%;padding:10px;border-radius:10px;border:1px solid #ddd;">
+
+</div>
+   <div id="page-timeline" class="page hidden">
     <div class="card">
       <div class="sub">时间轴</div>
       <div style="margin-top:10px;color:#999;">
@@ -344,24 +351,36 @@ const UI = {
     }
   },
 
-  renderTimeline(data) {
-    const page = document.getElementById("page-timeline");
-    if (!page) return;
+function renderTimeline(data) {
 
-    let html = `<div class="card"><div class="sub">时间轴</div>`;
+  const page = document.getElementById("page-timeline");
 
-    data.slice().reverse().forEach(item => {
+  let html = `<div style="margin-top:10px;">`;
 
-      const safeItem = encodeURIComponent(JSON.stringify(item));
+  data.slice().reverse().forEach(item => {
 
-      html += `
-        <div style="margin-top:12px;padding:10px;background:#fafafa;border-radius:10px;">
+    html += `
+      <div style="padding:10px;border-bottom:1px solid #eee;">
 
-          <div style="display:flex;gap:8px;margin-bottom:10px;">
+        <div>${item.category}</div>
 
-  <input id="searchBox"
-  placeholder="搜索金额/分类/标签"
-  style="flex:1;padding:10px;border-radius:10px;border:1px solid #ddd;">
+        <div style="color:${item.type==='income'?'#34c759':'#ff3b30'}">
+          ${item.type==='income' ? '+' : '-'}${item.amount}
+        </div>
+
+        <div style="font-size:12px;color:#999;">
+          ${(item.tags || []).join(" ")}
+        </div>
+
+      </div>
+    `;
+  });
+
+  html += `</div>`;
+
+  page.innerHTML = html;
+}
+
 
   <select id="filterType" style="padding:10px;border-radius:10px;">
     <option value="all">全部</option>
@@ -430,7 +449,35 @@ const UI = {
     document.getElementById("amount").value = item.amount || "";
     document.getElementById("category").value = item.category || "餐饮";
     document.getElementById("note").value = item.note || "";
-    document.addEventListener("input", applyFilter);
+    document.addEventListener("input", function(e) {
+
+  if (e.target.id !== "searchBox") return;
+
+  const key = e.target.value.trim().toLowerCase();
+
+  const tx = db.transaction(["records"], "readonly");
+  const store = tx.objectStore("records");
+
+  const req = store.getAll();
+
+  req.onsuccess = function() {
+
+    let data = req.result || [];
+
+    const filtered = data.filter(item => {
+
+      return (
+        (item.category || "").includes(key) ||
+        (item.note || "").toLowerCase().includes(key) ||
+        (item.amount + "").includes(key) ||
+        (item.payment || "").includes(key) ||
+        (item.tags || []).join(" ").includes(key)
+      );
+    });
+
+    renderTimeline(filtered);
+  };
+});
 
     openSheet();
   }
