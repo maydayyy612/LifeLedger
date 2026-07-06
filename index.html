@@ -426,7 +426,13 @@ function saveRecord() {
 
   const type = document.getElementById("type").value;
   const amount = parseFloat(document.getElementById("amount").value);
+
   const category = document.getElementById("category").value;
+  const date = document.getElementById("date").value || new Date().toISOString().split("T")[0];
+  const time = document.getElementById("time").value || new Date().toTimeString().slice(0,5);
+  const payment = document.getElementById("payment").value;
+
+  const tagsRaw = document.getElementById("tags").value || "";
   const note = document.getElementById("note").value;
 
   if (isNaN(amount)) {
@@ -439,8 +445,12 @@ function saveRecord() {
     type,
     amount,
     category,
+    date,
+    time,
+    payment,
+    tags: tagsRaw.match(/#[^\s#]+/g) || [],
     note,
-    date: new Date().toISOString()
+    createTime: Date.now()
   };
 
   if (editId) {
@@ -463,6 +473,10 @@ function openSheet() {
     document.getElementById("type").value = "expense";
     document.getElementById("amount").value = "";
     document.getElementById("category").value = "餐饮";
+    document.getElementById("date").value = new Date().toISOString().split("T")[0];
+    document.getElementById("time").value = new Date().toTimeString().slice(0,5);
+    document.getElementById("payment").value = "微信";
+    document.getElementById("tags").value = "";
     document.getElementById("note").value = "";
   }
 }
@@ -522,7 +536,7 @@ function openSheetFromFab() {
 </script>
 <div id="sheet" style="
 position:fixed;
-bottom:-600px;
+bottom:-700px;
 left:0;
 right:0;
 background:#fff;
@@ -530,29 +544,94 @@ border-radius:20px 20px 0 0;
 padding:20px;
 transition:0.3s;
 z-index:999;
+max-height:85vh;
+overflow:auto;
 ">
 
-<div style="text-align:center;font-weight:600;margin-bottom:10px;">
+<div style="text-align:center;font-weight:600;margin-bottom:15px;">
 新增记录
 </div>
 
-<select id="type" style="width:100%;padding:10px;margin-bottom:10px;">
-  <option value="expense">支出</option>
-  <option value="income">收入</option>
-</select>
+<!-- 类型 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">类型</div>
+  <select id="type" style="width:100%;padding:10px;">
+    <option value="expense">支出</option>
+    <option value="income">收入</option>
+  </select>
+</div>
 
-<input id="amount" placeholder="金额" style="width:100%;padding:10px;margin-bottom:10px;" />
+<!-- 金额 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">金额</div>
+  <input id="amount" type="number" placeholder="请输入金额"
+  style="width:100%;padding:10px;">
+</div>
 
-<select id="category" style="width:100%;padding:10px;margin-bottom:10px;">
-  <option>餐饮</option>
-  <option>交通</option>
-  <option>购物</option>
-  <option>娱乐</option>
-  <option>工资</option>
-</select>
+<!-- 分类 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">分类</div>
+  <select id="category" style="width:100%;padding:10px;">
+    <option>餐饮</option>
+    <option>饮品</option>
+    <option>交通</option>
+    <option>房租</option>
+    <option>购物</option>
+    <option>娱乐</option>
+    <option>旅行</option>
+    <option>数码</option>
+    <option>学习</option>
+    <option>医疗</option>
+    <option>工资</option>
+    <option>投资</option>
+    <option>其他收入</option>
+  </select>
+</div>
 
-<input id="note" placeholder="备注" style="width:100%;padding:10px;margin-bottom:10px;" />
+<!-- 日期 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">日期</div>
+  <input id="date" type="date" style="width:100%;padding:10px;">
+</div>
 
+<!-- 时间 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">时间</div>
+  <input id="time" type="time" style="width:100%;padding:10px;">
+</div>
+
+<!-- 付款方式 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">付款方式</div>
+  <select id="payment" style="width:100%;padding:10px;">
+    <option>现金</option>
+    <option>微信</option>
+    <option>支付宝</option>
+    <option>银行卡</option>
+  </select>
+</div>
+
+<!-- 标签 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">标签（用 # 分隔）</div>
+  <input id="tags" placeholder="#旅行 #餐饮"
+  style="width:100%;padding:10px;">
+</div>
+
+<!-- 备注 -->
+<div style="margin-bottom:10px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">备注</div>
+  <input id="note" placeholder="备注"
+  style="width:100%;padding:10px;">
+</div>
+
+<!-- 图片（预留） -->
+<div style="margin-bottom:15px;">
+  <div style="font-size:13px;color:#666;margin-bottom:5px;">图片</div>
+  <button style="width:100%;padding:10px;">+ 添加图片（V4.1启用）</button>
+</div>
+
+<!-- 操作 -->
 <button onclick="saveRecord()" style="
 width:100%;
 padding:12px;
@@ -560,8 +639,19 @@ background:#007aff;
 color:#fff;
 border:none;
 border-radius:12px;
+margin-bottom:10px;
 ">
 保存
+</button>
+
+<button onclick="closeSheet()" style="
+width:100%;
+padding:12px;
+background:#f2f2f2;
+border:none;
+border-radius:12px;
+">
+取消
 </button>
 
 </div>
