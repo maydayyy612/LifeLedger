@@ -246,6 +246,17 @@ const categories = [
   "餐饮","饮品","交通","房租","购物","娱乐",
   "旅行","数码","工资","投资","礼物","宠物","学习","医疗","其他"
 ];
+     const paymentMethods = [
+  "💵 现金",
+  "💚 微信",
+  "🔵 支付宝",
+  "🌼 花呗",
+  "🎵 抖音月付",
+  "🛒 京东白条",
+  "🍔 美团月付",
+  "💳 信用卡",
+  "🏦 银行卡"
+];
 
 /* =========================
    数据层
@@ -346,14 +357,19 @@ const UI = {
       html += `
         <div style="margin-top:12px;padding:10px;background:#fafafa;border-radius:10px;">
 
-          <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;gap:8px;margin-bottom:10px;">
 
-            <div>
-              <div>${item.category || ""}</div>
-              <div style="font-size:12px;color:#999;">
-                ${item.note || ""}
-              </div>
-            </div>
+  <input id="searchBox"
+  placeholder="搜索金额/分类/标签"
+  style="flex:1;padding:10px;border-radius:10px;border:1px solid #ddd;">
+
+  <select id="filterType" style="padding:10px;border-radius:10px;">
+    <option value="all">全部</option>
+    <option value="income">收入</option>
+    <option value="expense">支出</option>
+  </select>
+
+</div>
 
             <div style="text-align:right;">
 
@@ -414,10 +430,19 @@ const UI = {
     document.getElementById("amount").value = item.amount || "";
     document.getElementById("category").value = item.category || "餐饮";
     document.getElementById("note").value = item.note || "";
+    document.addEventListener("input", applyFilter);
 
     openSheet();
   }
 };
+     function renderPaymentOptions() {
+  const select = document.getElementById("payment");
+  if (!select) return;
+
+  select.innerHTML = paymentMethods
+    .map(p => `<option value="${p}">${p}</option>`)
+    .join("");
+}
 
 /* =========================
    保存记录
@@ -467,6 +492,7 @@ function saveRecord() {
    sheet 控制（稳定版）
 ========================= */
 function openSheet() {
+   renderPaymentOptions();
   document.getElementById("sheet").style.bottom = "0px";
 
   if (!editId) {
@@ -526,12 +552,67 @@ function switchPage(page, el) {
   if (el) el.classList.add('active');
 }
 
+function applyFilter() {
+
+  const key = document.getElementById("searchBox").value.toLowerCase();
+  const type = document.getElementById("filterType").value;
+
+  DataLayer.getAll(data => {
+
+    const filtered = data.filter(i => {
+
+      const matchType = type === "all" || i.type === type;
+
+      const matchText =
+        (i.category || "").includes(key) ||
+        (i.note || "").toLowerCase().includes(key) ||
+        (i.tags || []).join(" ").includes(key) ||
+        String(i.amount || "").includes(key);
+
+      return matchType && matchText;
+    });
+
+    UI.renderTimeline(filtered);
+  });
+}     
 /* =========================
    FAB按钮
 ========================= */
 function openSheetFromFab() {
   editId = null;
   openSheet();
+}
+     function filterByDate(range) {
+
+  const now = new Date();
+
+  DataLayer.getAll(data => {
+
+    let filtered = data;
+
+    if (range === "today") {
+      const today = now.toISOString().split("T")[0];
+      filtered = data.filter(i => i.date === today);
+    }
+
+    if (range === "month") {
+      const m = now.getFullYear() + "-" + String(now.getMonth()+1).padStart(2,'0');
+      filtered = data.filter(i => (i.date || "").startsWith(m));
+    }
+
+    UI.renderTimeline(filtered);
+  });
+}
+     function filterByTag(tag) {
+
+  DataLayer.getAll(data => {
+
+    const filtered = data.filter(i =>
+      (i.tags || []).includes(tag)
+    );
+
+    UI.renderTimeline(filtered);
+  });
 }
 </script>
 <div id="sheet" style="
@@ -603,11 +684,8 @@ overflow:auto;
 <!-- 付款方式 -->
 <div style="margin-bottom:10px;">
   <div style="font-size:13px;color:#666;margin-bottom:5px;">付款方式</div>
+
   <select id="payment" style="width:100%;padding:10px;">
-    <option>现金</option>
-    <option>微信</option>
-    <option>支付宝</option>
-    <option>银行卡</option>
   </select>
 </div>
 
